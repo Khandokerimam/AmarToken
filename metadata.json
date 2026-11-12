@@ -1,0 +1,6 @@
+{
+  "name": "UniToken - University Hall Meal Token System & Python OOP Hub",
+  "description": "Comprehensive university hall meal token platform with student purchasing, digital QR tokens, staff scanner, and full Python OOP architecture, runnable code, and project blueprint.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
