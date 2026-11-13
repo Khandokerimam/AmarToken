@@ -3,71 +3,210 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   UNIVERSITY_HALLS,
-  INITIAL_STUDENT,
+  INITIAL_STUDENTS,
+  ADMIN_ACCOUNTS,
+  STAFF_ACCOUNTS,
   INITIAL_TOKENS,
+  INITIAL_ORDERS,
+  INITIAL_PAYMENTS,
   INITIAL_TRANSACTIONS
 } from './data/hallsData';
 import {
   ResidentialHall,
   StudentProfile,
   MealToken,
+  MealOrder,
+  PaymentSubmission,
   WalletTransaction,
   MealSlot,
   MealSchedule,
-  DietaryType
+  DietaryType,
+  AuthSession,
+  PublicRoute,
+  UserRole
 } from './types';
-import { Header } from './components/Header';
-import { StudentPortal } from './components/StudentPortal';
-import { TokenVault } from './components/TokenVault';
-import { StaffScanner } from './components/StaffScanner';
-import { ManagerKitchenPanel } from './components/ManagerKitchenPanel';
+import { PublicPortal } from './components/PublicPortal';
+import { StudentDashboard } from './components/StudentDashboard';
+import { AdminDashboard } from './components/AdminDashboard';
+import { StaffDashboard } from './components/StaffDashboard';
 import { WalletModal } from './components/WalletModal';
-import { RegisterModal } from './components/RegisterModal';
+
+const STORAGE_KEY = 'amartoken_mbstu_state_v2';
+
+interface PersistedState {
+  halls: ResidentialHall[];
+  students: StudentProfile[];
+  tokens: MealToken[];
+  orders: MealOrder[];
+  payments: PaymentSubmission[];
+  transactions: WalletTransaction[];
+  session: AuthSession | null;
+}
+
+function loadInitialState(): PersistedState {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw) as PersistedState;
+      if (parsed && Array.isArray(parsed.halls) && Array.isArray(parsed.students)) {
+        return parsed;
+      }
+    }
+  } catch {
+    // Fallback to initial defaults
+  }
+  return {
+    halls: UNIVERSITY_HALLS,
+    students: INITIAL_STUDENTS,
+    tokens: INITIAL_TOKENS,
+    orders: INITIAL_ORDERS,
+    payments: INITIAL_PAYMENTS,
+    transactions: INITIAL_TRANSACTIONS,
+    session: null
+  };
+}
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState<'store' | 'tokens' | 'scanner' | 'kitchen'>('store');
-  const [halls, setHalls] = useState<ResidentialHall[]>(UNIVERSITY_HALLS);
-  const [selectedHall, setSelectedHall] = useState<ResidentialHall>(UNIVERSITY_HALLS[5]); // Shaheed Abrar Fahad Hall
-  const [student, setStudent] = useState<StudentProfile>(INITIAL_STUDENT);
-  const [tokens, setTokens] = useState<MealToken[]>(INITIAL_TOKENS);
-  const [transactions, setTransactions] = useState<WalletTransaction[]>(INITIAL_TRANSACTIONS);
+  const initial = loadInitialState();
+
+  const [halls, setHalls] = useState<ResidentialHall[]>(initial.halls);
+  const [students, setStudents] = useState<StudentProfile[]>(initial.students);
+  const [tokens, setTokens] = useState<MealToken[]>(initial.tokens);
+  const [orders, setOrders] = useState<MealOrder[]>(initial.orders);
+  const [payments, setPayments] = useState<PaymentSubmission[]>(initial.payments);
+  const [transactions, setTransactions] = useState<WalletTransaction[]>(initial.transactions);
+  const [session, setSession] = useState<AuthSession | null>(initial.session);
+  const [publicRoute, setPublicRoute] = useState<PublicRoute>('home');
   const [isWalletModalOpen, setIsWalletModalOpen] = useState(false);
-  const [isRegisterModalOpen, setIsRegisterModalOpen] = useState(false);
 
-  // Active token count for badge
-  const activeTokenCount = tokens.filter(t => t.status === 'ACTIVE').length;
+  useEffect(() => {
+    try {
+      const payload: PersistedState = {
+        halls,
+        students,
+        tokens,
+        orders,
+        payments,
+        transactions,
+        session
+      };
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
+    } catch {
+      // Ignore storage quota errors
+    }
+  }, [halls, students, tokens, orders, payments, transactions, session]);
 
-  // Purchase Token Handler
+  const handleLoginSuccess = (role: UserRole, userId: string) => {
+    if (role === 'STUDENT') {
+      const st = students.find(s => s.id === userId);
+      if (!st) return;
+      setSession({
+        role: 'STUDENT',
+        userId: st.id,
+        name: st.name,
+        email: st.academicEmail,
+        hallId: st.hallId,
+        hallName: st.hallName
+      });
+    } else if (role === 'ADMIN') {
+      const adm = ADMIN_ACCOUNTS.find(a => a.id === userId);
+      if (!adm) return;
+      setSession({
+        role: 'ADMIN',
+        userId: adm.id,
+        name: adm.name,
+        email: adm.email,
+        hallId: adm.assignedHallId,
+        hallName: 'All MBSTU Halls'
+      });
+    } else if (role === 'STAFF') {
+      const stf = STAFF_ACCOUNTS.find(s => s.id === userId);
+      if (!stf) return;
+      const hallObj = halls.find(h => h.id === stf.assignedHallId);
+      setSession({
+        role: 'STAFF',
+        userId: stf.id,
+        name: stf.name,
+        email: stf.email,
+        hallId: stf.assignedHallId,
+        hallName: hallObj?.name || 'Hall Gate'
+      });
+    }
+  };
+
+  const handleRegisterStudent = (newProfile: StudentProfile) => {
+    setStudents(prev => [newProfile, ...prev]);
+    setTransactions(prev => [
+      {
+        id: `tx-welcome-${Date.now()}`,
+        studentId: newProfile.studentId,
+        date: new Date().toLocaleDateString('en-US', {
+          month: 'short',
+          day: 'numeric',
+          hour: '2-digit',
+          minute: '2-digit'
+        }),
+        type: 'TOPUP',
+        amount: newProfile.walletBalance,
+        description: 'Initial Hall Dining Wallet Opening Balance',
+        paymentMethod: 'HALL_OFFICE_CASH'
+      },
+      ...prev
+    ]);
+    setSession({
+      role: 'STUDENT',
+      userId: newProfile.id,
+      name: newProfile.name,
+      email: newProfile.academicEmail,
+      hallId: newProfile.hallId,
+      hallName: newProfile.hallName
+    });
+  };
+
+  const handleLogout = () => {
+    setSession(null);
+    setPublicRoute('home');
+    setIsWalletModalOpen(false);
+  };
+
+  // Student token purchase handler
   const handlePurchaseToken = (
+    hall: ResidentialHall,
     mealSlot: MealSlot,
     mealSchedule: MealSchedule,
     dietary: DietaryType,
-    paymentMethod: string
+    paymentMethod: 'WALLET' | 'BKASH' | 'NAGAD' | 'CARD'
   ): boolean => {
+    if (!session || session.role !== 'STUDENT') return false;
+    const activeStudent = students.find(s => s.id === session.userId);
+    if (!activeStudent) return false;
+
     const todayStr = new Date().toISOString().split('T')[0];
     const tokenSeq = Math.floor(1000 + Math.random() * 9000);
-    const tokenNumber = `${selectedHall.code}-${todayStr.replace(/-/g, '')}-${mealSlot[0]}-${tokenSeq}`;
+    const tokenNumber = `${hall.code}-${todayStr.replace(/-/g, '')}-${mealSlot[0]}-${tokenSeq}`;
+    const orderNumber = `ORD-${todayStr.replace(/-/g, '')}-${tokenSeq}`;
+    const orderId = `ord-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
 
-    // Cryptographic hash simulation
     const hash = Array.from({ length: 64 }, () =>
       Math.floor(Math.random() * 16).toString(16)
     ).join('');
 
     const newToken: MealToken = {
-      id: `tok-${Date.now()}-${Math.random()}`,
+      id: `tok-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+      orderId,
       tokenNumber,
-      studentId: student.studentId,
-      studentName: student.name,
-      academicEmail: student.academicEmail,
-      hallId: selectedHall.id,
-      hallName: selectedHall.name,
-      roomNumber: student.roomNumber,
+      studentId: activeStudent.studentId,
+      studentName: activeStudent.name,
+      academicEmail: activeStudent.academicEmail,
+      hallId: hall.id,
+      hallName: hall.name,
+      roomNumber: activeStudent.roomNumber,
       mealSlot,
       mealDate: todayStr,
-      menuName: mealSchedule.menu.name,
+      mealTitle: mealSchedule.title,
       dietaryType: dietary,
       price: mealSchedule.price,
       status: 'ACTIVE',
@@ -75,17 +214,41 @@ export default function App() {
       verificationHash: hash
     };
 
-    // Deduct from wallet if wallet payment
+    const newOrder: MealOrder = {
+      id: orderId,
+      orderNumber,
+      tokenNumber,
+      studentId: activeStudent.studentId,
+      studentName: activeStudent.name,
+      academicEmail: activeStudent.academicEmail,
+      hallId: hall.id,
+      hallName: hall.name,
+      mealSlot,
+      mealDate: todayStr,
+      amount: mealSchedule.price,
+      paymentMethod,
+      orderStatus: 'ISSUED',
+      createdAt: new Date().toLocaleDateString('en-US', {
+        month: 'short',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit'
+      })
+    };
+
     if (paymentMethod === 'WALLET') {
-      setStudent(prev => ({
-        ...prev,
-        walletBalance: prev.walletBalance - mealSchedule.price
-      }));
+      setStudents(prev =>
+        prev.map(s =>
+          s.id === activeStudent.id
+            ? { ...s, walletBalance: Math.max(0, s.walletBalance - mealSchedule.price) }
+            : s
+        )
+      );
     }
 
-    // Add transaction ledger entry
     const newTx: WalletTransaction = {
-      id: `tx-${Date.now()}`,
+      id: `tx-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+      studentId: activeStudent.studentId,
       date: new Date().toLocaleDateString('en-US', {
         month: 'short',
         day: 'numeric',
@@ -96,68 +259,146 @@ export default function App() {
       amount: -mealSchedule.price,
       description: `Purchased ${mealSlot} Token (${tokenNumber})`,
       referenceId: newToken.id,
-      paymentMethod: paymentMethod as any
+      paymentMethod:
+        paymentMethod === 'WALLET'
+          ? 'STUDENT_WALLET'
+          : paymentMethod === 'CARD'
+          ? 'BANK_CARD'
+          : paymentMethod
     };
 
     setTokens(prev => [newToken, ...prev]);
+    setOrders(prev => [newOrder, ...prev]);
     setTransactions(prev => [newTx, ...prev]);
-
     return true;
   };
 
-  // Staff Gate Scanner Redemption
+  // Student instant top-up
+  const handleTopUp = (
+    amount: number,
+    method: 'BKASH' | 'NAGAD' | 'BANK_CARD' | 'HALL_OFFICE_CASH'
+  ) => {
+    if (!session || session.role !== 'STUDENT') return;
+    const activeStudent = students.find(s => s.id === session.userId);
+    if (!activeStudent) return;
+
+    setStudents(prev =>
+      prev.map(s =>
+        s.id === activeStudent.id ? { ...s, walletBalance: s.walletBalance + amount } : s
+      )
+    );
+
+    setTransactions(prev => [
+      {
+        id: `tx-${Date.now()}`,
+        studentId: activeStudent.studentId,
+        date: new Date().toLocaleDateString('en-US', {
+          month: 'short',
+          day: 'numeric',
+          hour: '2-digit',
+          minute: '2-digit'
+        }),
+        type: 'TOPUP',
+        amount,
+        description: `Instant Wallet Recharge via ${method}`,
+        paymentMethod: method
+      },
+      ...prev
+    ]);
+  };
+
+  // Student submit payment slip for Admin verification
+  const handleSubmitPaymentSlip = (
+    amount: number,
+    method: 'BKASH' | 'NAGAD' | 'BANK_CARD' | 'HALL_OFFICE_CASH',
+    referenceId: string
+  ) => {
+    if (!session || session.role !== 'STUDENT') return;
+    const activeStudent = students.find(s => s.id === session.userId);
+    if (!activeStudent) return;
+
+    const newSlip: PaymentSubmission = {
+      id: `pay-${Date.now()}`,
+      referenceId,
+      studentId: activeStudent.studentId,
+      studentName: activeStudent.name,
+      academicEmail: activeStudent.academicEmail,
+      hallId: activeStudent.hallId,
+      hallName: activeStudent.hallName,
+      amount,
+      method,
+      submittedAt: new Date().toLocaleDateString('en-US', {
+        month: 'short',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit'
+      }),
+      status: 'PENDING'
+    };
+
+    setPayments(prev => [newSlip, ...prev]);
+  };
+
+  // Student profile update
+  const handleUpdateStudentProfile = (phone: string, dietaryPreference: DietaryType) => {
+    if (!session || session.role !== 'STUDENT') return;
+    setStudents(prev =>
+      prev.map(s =>
+        s.id === session.userId ? { ...s, phone, dietaryPreference } : s
+      )
+    );
+  };
+
+  // Staff token redemption
   const handleRedeemToken = (
     tokenNumber: string,
-    staffName: string
+    gateHallId: string,
+    staffLabel: string
   ): { success: boolean; reason: string; message: string; token?: MealToken } => {
     const foundToken = tokens.find(
       t => t.tokenNumber.toUpperCase() === tokenNumber.toUpperCase()
     );
+    const gateHall = halls.find(h => h.id === gateHallId);
 
     if (!foundToken) {
       return {
         success: false,
         reason: 'NOT_FOUND',
-        message: `Token #${tokenNumber} was not found in MBSTU records!`
+        message: `Token #${tokenNumber} was not found in MBSTU records.`
       };
     }
 
-    // Check Hall match
-    if (foundToken.hallId.toLowerCase() !== selectedHall.id.toLowerCase()) {
+    if (foundToken.hallId.toLowerCase() !== gateHallId.toLowerCase()) {
       return {
         success: false,
         reason: 'WRONG_HALL',
-        message: `Cross-Hall Denied! Token was issued for "${foundToken.hallName}", but this gate is "${selectedHall.name}".`,
+        message: `Cross-Hall Denied! Token belongs to ${foundToken.hallName}, not ${gateHall?.name || 'this gate'}.`,
         token: foundToken
       };
     }
 
-    // Anti double-spend check
     if (foundToken.status === 'REDEEMED') {
       return {
         success: false,
         reason: 'ALREADY_REDEEMED',
-        message: `FRAUD ALERT! Token was already redeemed on ${
-          foundToken.redeemedAt
-            ? new Date(foundToken.redeemedAt).toLocaleTimeString()
-            : 'earlier today'
-        }!`,
+        message: `DOUBLE-SPEND BLOCKED! Token was already redeemed on ${
+          foundToken.redeemedAt ? new Date(foundToken.redeemedAt).toLocaleTimeString() : 'earlier'
+        }.`,
         token: foundToken
       };
     }
 
-    // Success: atomically redeem token
     const nowIso = new Date().toISOString();
     setTokens(prev =>
       prev.map(t =>
         t.id === foundToken.id
-          ? {
-              ...t,
-              status: 'REDEEMED',
-              redeemedAt: nowIso,
-              redemptionStaff: staffName
-            }
+          ? { ...t, status: 'REDEEMED', redeemedAt: nowIso, redemptionStaff: staffLabel }
           : t
+      )
+    );
+    setOrders(prev =>
+      prev.map(o =>
+        o.tokenNumber === foundToken.tokenNumber ? { ...o, orderStatus: 'REDEEMED' } : o
       )
     );
 
@@ -169,140 +410,239 @@ export default function App() {
         ...foundToken,
         status: 'REDEEMED',
         redeemedAt: nowIso,
-        redemptionStaff: staffName
+        redemptionStaff: staffLabel
       }
     };
   };
 
-  // Wallet Top-Up Handler
-  const handleTopUp = (
-    amount: number,
-    method: 'BKASH' | 'NAGAD' | 'STUDENT_WALLET' | 'BANK_CARD' | 'HALL_OFFICE_CASH'
+  // Admin: Manage Meals
+  const handleUpdateMeal = (
+    hallId: string,
+    mealSlot: MealSlot,
+    updates: {
+      title: string;
+      description: string;
+      price: number;
+      calories: number;
+      isAvailable: boolean;
+    }
   ) => {
-    setStudent(prev => ({
-      ...prev,
-      walletBalance: prev.walletBalance + amount
-    }));
-
-    const newTx: WalletTransaction = {
-      id: `tx-${Date.now()}`,
-      date: new Date().toLocaleDateString('en-US', {
-        month: 'short',
-        day: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit'
-      }),
-      type: 'TOPUP',
-      amount,
-      description: `Wallet Recharge via ${method}`,
-      paymentMethod: method
-    };
-
-    setTransactions(prev => [newTx, ...prev]);
+    setHalls(prev =>
+      prev.map(h => {
+        if (h.id !== hallId) return h;
+        return {
+          ...h,
+          diningSchedule: h.diningSchedule.map(sch =>
+            sch.mealSlot === mealSlot
+              ? {
+                  ...sch,
+                  title: updates.title,
+                  price: updates.price,
+                  isAvailable: updates.isAvailable,
+                  menu: {
+                    ...sch.menu,
+                    description: updates.description,
+                    calories: updates.calories
+                  }
+                }
+              : sch
+          )
+        };
+      })
+    );
   };
 
-  // Student Registration Handler
-  const handleRegisterStudent = (newProfile: StudentProfile) => {
-    setStudent(newProfile);
-    const registeredHall = halls.find(h => h.id === newProfile.hallId);
-    if (registeredHall) {
-      setSelectedHall(registeredHall);
+  // Admin: Manage Meal Schedules
+  const handleUpdateSchedule = (
+    hallId: string,
+    mealSlot: MealSlot,
+    updates: {
+      timeWindow: string;
+      cutoffTime: string;
+      isCutoffPassed: boolean;
+    }
+  ) => {
+    setHalls(prev =>
+      prev.map(h => {
+        if (h.id !== hallId) return h;
+        return {
+          ...h,
+          diningSchedule: h.diningSchedule.map(sch =>
+            sch.mealSlot === mealSlot ? { ...sch, ...updates } : sch
+          )
+        };
+      })
+    );
+  };
+
+  // Admin: Manage Students
+  const handleToggleStudentStatus = (studentRecordId: string) => {
+    setStudents(prev =>
+      prev.map(s =>
+        s.id === studentRecordId
+          ? { ...s, status: s.status === 'ACTIVE' ? 'SUSPENDED' : 'ACTIVE' }
+          : s
+      )
+    );
+  };
+
+  const handleCreditStudentWallet = (studentRecordId: string, amount: number) => {
+    const target = students.find(s => s.id === studentRecordId);
+    if (!target) return;
+
+    setStudents(prev =>
+      prev.map(s =>
+        s.id === studentRecordId ? { ...s, walletBalance: s.walletBalance + amount } : s
+      )
+    );
+    setTransactions(prev => [
+      {
+        id: `tx-adm-${Date.now()}`,
+        studentId: target.studentId,
+        date: new Date().toLocaleDateString('en-US', {
+          month: 'short',
+          day: 'numeric',
+          hour: '2-digit',
+          minute: '2-digit'
+        }),
+        type: 'TOPUP',
+        amount,
+        description: 'Hall Admin Direct Wallet Credit',
+        paymentMethod: 'HALL_OFFICE_CASH'
+      },
+      ...prev
+    ]);
+  };
+
+  // Admin: Verify Payments
+  const handleVerifyPayment = (
+    paymentId: string,
+    decision: 'VERIFIED' | 'REJECTED',
+    adminName: string
+  ) => {
+    const targetPayment = payments.find(p => p.id === paymentId);
+    if (!targetPayment || targetPayment.status !== 'PENDING') return;
+
+    const verifiedAt = new Date().toLocaleDateString('en-US', {
+      month: 'short',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    });
+
+    setPayments(prev =>
+      prev.map(p =>
+        p.id === paymentId
+          ? { ...p, status: decision, verifiedBy: adminName, verifiedAt }
+          : p
+      )
+    );
+
+    if (decision === 'VERIFIED') {
+      setStudents(prev =>
+        prev.map(s =>
+          s.studentId === targetPayment.studentId
+            ? { ...s, walletBalance: s.walletBalance + targetPayment.amount }
+            : s
+        )
+      );
+      setTransactions(prev => [
+        {
+          id: `tx-ver-${Date.now()}`,
+          studentId: targetPayment.studentId,
+          date: verifiedAt,
+          type: 'TOPUP',
+          amount: targetPayment.amount,
+          description: `Verified Payment Slip (${targetPayment.referenceId})`,
+          referenceId: targetPayment.referenceId,
+          paymentMethod: targetPayment.method
+        },
+        ...prev
+      ]);
     }
   };
 
-  return (
-    <div className="min-h-screen bg-slate-50 text-slate-900 flex flex-col font-sans selection:bg-red-100 selection:text-red-900">
-      {/* Top Bar Header with MBSTU Logo & Red Theme */}
-      <Header
-        activeTab={activeTab}
-        onSelectTab={setActiveTab}
-        student={student}
-        activeTokenCount={activeTokenCount}
-        onOpenWalletModal={() => setIsWalletModalOpen(true)}
-        onOpenRegisterModal={() => setIsRegisterModalOpen(true)}
-      />
-
-      {/* Main Content Viewport */}
-      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {activeTab === 'store' && (
-          <StudentPortal
-            halls={halls}
-            selectedHall={selectedHall}
-            onSelectHall={setSelectedHall}
-            student={student}
-            onPurchaseToken={handlePurchaseToken}
-            onOpenWalletModal={() => setIsWalletModalOpen(true)}
-            onOpenRegisterModal={() => setIsRegisterModalOpen(true)}
-          />
-        )}
-
-        {activeTab === 'tokens' && (
-          <TokenVault
-            tokens={tokens}
-            onSimulateGateScan={tokenNum => {
-              setActiveTab('scanner');
-              setTimeout(() => {
-                handleRedeemToken(tokenNum, `Gate Attendant (${selectedHall.code})`);
-              }, 150);
-            }}
-            onNavigateToStore={() => setActiveTab('store')}
-          />
-        )}
-
-        {activeTab === 'scanner' && (
-          <StaffScanner
-            hall={selectedHall}
-            tokens={tokens}
-            onRedeemToken={handleRedeemToken}
-          />
-        )}
-
-        {activeTab === 'kitchen' && (
-          <ManagerKitchenPanel
-            hall={selectedHall}
-            tokens={tokens}
-          />
-        )}
-      </main>
-
-      {/* Student Academic Registration Modal */}
-      <RegisterModal
-        isOpen={isRegisterModalOpen}
-        onClose={() => setIsRegisterModalOpen(false)}
+  // Route 1: Public Portal (Home, Student Registration, 3-Role Login)
+  if (!session) {
+    return (
+      <PublicPortal
+        route={publicRoute}
+        onNavigate={setPublicRoute}
         halls={halls}
+        students={students}
+        admins={ADMIN_ACCOUNTS}
+        staffList={STAFF_ACCOUNTS}
+        onLoginSuccess={handleLoginSuccess}
         onRegisterStudent={handleRegisterStudent}
-        currentStudent={student}
       />
+    );
+  }
 
-      {/* Student Wallet Recharge Modal */}
-      <WalletModal
-        isOpen={isWalletModalOpen}
-        onClose={() => setIsWalletModalOpen(false)}
-        student={student}
-        transactions={transactions}
-        onTopUp={handleTopUp}
+  // Route 2: Student Dashboard
+  if (session.role === 'STUDENT') {
+    const activeStudent = students.find(s => s.id === session.userId);
+    if (!activeStudent) {
+      handleLogout();
+      return null;
+    }
+
+    return (
+      <>
+        <StudentDashboard
+          student={activeStudent}
+          halls={halls}
+          tokens={tokens}
+          orders={orders}
+          payments={payments}
+          transactions={transactions}
+          onPurchaseToken={handlePurchaseToken}
+          onOpenWalletModal={() => setIsWalletModalOpen(true)}
+          onSubmitPaymentSlip={handleSubmitPaymentSlip}
+          onUpdateProfile={handleUpdateStudentProfile}
+          onLogout={handleLogout}
+        />
+        <WalletModal
+          isOpen={isWalletModalOpen}
+          onClose={() => setIsWalletModalOpen(false)}
+          student={activeStudent}
+          transactions={transactions}
+          onTopUp={handleTopUp}
+          onSubmitPaymentSlip={handleSubmitPaymentSlip}
+        />
+      </>
+    );
+  }
+
+  // Route 3: Admin Dashboard
+  if (session.role === 'ADMIN') {
+    const activeAdmin = ADMIN_ACCOUNTS.find(a => a.id === session.userId) || ADMIN_ACCOUNTS[0];
+    return (
+      <AdminDashboard
+        admin={activeAdmin}
+        halls={halls}
+        students={students}
+        tokens={tokens}
+        orders={orders}
+        payments={payments}
+        onUpdateMeal={handleUpdateMeal}
+        onUpdateSchedule={handleUpdateSchedule}
+        onToggleStudentStatus={handleToggleStudentStatus}
+        onCreditStudentWallet={handleCreditStudentWallet}
+        onVerifyPayment={handleVerifyPayment}
+        onLogout={handleLogout}
       />
+    );
+  }
 
-      {/* University Footer in Crimson and White */}
-      <footer className="border-t border-red-100 bg-white py-6 text-xs text-slate-500">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row items-center justify-between gap-4">
-          <div className="flex items-center gap-2.5">
-            <img
-              src="/assets/aistudio/university_projects_550e2ddf.png"
-              alt="MBSTU Logo"
-              className="w-5 h-5 object-contain"
-            />
-            <span className="font-bold text-red-800">AmarToken</span>
-            <span aria-hidden="true">·</span>
-            <span>Mawlana Bhashani Science &amp; Technology University</span>
-            <span aria-hidden="true">·</span>
-            <span className="text-red-700 font-medium">Non-Refundable Dining Policy</span>
-          </div>
-          <div className="text-[11px] text-slate-400">
-            University Residential Hall Meal Token Management System
-          </div>
-        </div>
-      </footer>
-    </div>
+  // Route 4: Staff Dashboard
+  const activeStaff = STAFF_ACCOUNTS.find(s => s.id === session.userId) || STAFF_ACCOUNTS[0];
+  return (
+    <StaffDashboard
+      staff={activeStaff}
+      halls={halls}
+      tokens={tokens}
+      onRedeemToken={handleRedeemToken}
+      onLogout={handleLogout}
+    />
   );
 }

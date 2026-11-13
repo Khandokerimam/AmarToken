@@ -4,6 +4,10 @@ export type DietaryType = 'REGULAR' | 'VEGETARIAN' | 'HALAL_NON_VEG' | 'DIABETIC
 
 export type TokenStatus = 'ACTIVE' | 'REDEEMED' | 'EXPIRED';
 
+export type UserRole = 'STUDENT' | 'ADMIN' | 'STAFF';
+
+export type PublicRoute = 'home' | 'login' | 'register';
+
 export interface MenuItem {
   id: string;
   name: string;
@@ -22,6 +26,7 @@ export interface MealSchedule {
   cutoffHoursRemaining: number;
   price: number;
   isCutoffPassed: boolean;
+  isAvailable: boolean;
   menu: MenuItem;
 }
 
@@ -43,6 +48,7 @@ export interface StudentProfile {
   studentId: string;
   name: string;
   academicEmail: string;
+  password: string;
   hallId: string;
   hallName: string;
   roomNumber: string;
@@ -51,20 +57,51 @@ export interface StudentProfile {
   walletBalance: number;
   dietaryPreference: DietaryType;
   phone: string;
+  status: 'ACTIVE' | 'SUSPENDED';
+  registeredAt: string;
+}
+
+export interface AdminAccount {
+  id: string;
+  name: string;
+  email: string;
+  password: string;
+  designation: string;
+  assignedHallId: string | 'ALL';
+}
+
+export interface StaffAccount {
+  id: string;
+  staffId: string;
+  name: string;
+  email: string;
+  password: string;
+  assignedHallId: string;
+  counterGate: string;
+}
+
+export interface AuthSession {
+  role: UserRole;
+  userId: string;
+  name: string;
+  email: string;
+  hallId: string;
+  hallName: string;
 }
 
 export interface MealToken {
   id: string;
+  orderId: string;
   tokenNumber: string; // e.g. SAFH-20261112-L-084
   studentId: string;
   studentName: string;
-  academicEmail?: string;
+  academicEmail: string;
   hallId: string;
   hallName: string;
   roomNumber: string;
   mealSlot: MealSlot;
   mealDate: string; // YYYY-MM-DD
-  menuName: string;
+  mealTitle: string;
   dietaryType: DietaryType;
   price: number;
   status: TokenStatus;
@@ -74,8 +111,42 @@ export interface MealToken {
   verificationHash: string;
 }
 
+export interface MealOrder {
+  id: string;
+  orderNumber: string;
+  tokenNumber: string;
+  studentId: string;
+  studentName: string;
+  academicEmail: string;
+  hallId: string;
+  hallName: string;
+  mealSlot: MealSlot;
+  mealDate: string;
+  amount: number;
+  paymentMethod: 'WALLET' | 'BKASH' | 'NAGAD' | 'CARD';
+  orderStatus: 'ISSUED' | 'REDEEMED';
+  createdAt: string;
+}
+
+export interface PaymentSubmission {
+  id: string;
+  referenceId: string;
+  studentId: string;
+  studentName: string;
+  academicEmail: string;
+  hallId: string;
+  hallName: string;
+  amount: number;
+  method: 'BKASH' | 'NAGAD' | 'BANK_CARD' | 'HALL_OFFICE_CASH';
+  submittedAt: string;
+  status: 'PENDING' | 'VERIFIED' | 'REJECTED';
+  verifiedBy?: string;
+  verifiedAt?: string;
+}
+
 export interface WalletTransaction {
   id: string;
+  studentId: string;
   date: string;
   type: 'TOPUP' | 'TOKEN_PURCHASE';
   amount: number;

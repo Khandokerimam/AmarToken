@@ -44,6 +44,10 @@ class SoundEffects {
     }
   }
 
+  playSuccessChime(): void {
+    this.playSuccessScan();
+  }
+
   playErrorBuzz(): void {
     try {
       const ctx = this.getContext();
