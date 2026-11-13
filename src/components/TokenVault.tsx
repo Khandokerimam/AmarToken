@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { MealToken, TokenStatus } from '../types';
 import { TokenCard } from './TokenCard';
-import { QrCode, Search, Printer, Utensils, Ban } from 'lucide-react';
+import { QrCode, Search, Utensils, Ban } from 'lucide-react';
 
 interface TokenVaultProps {
   tokens: MealToken[];
@@ -14,7 +14,7 @@ export const TokenVault: React.FC<TokenVaultProps> = ({
   onSimulateGateScan,
   onNavigateToStore
 }) => {
-  const [filterStatus, setFilterStatus] = useState<'ALL' | TokenStatus>('ALL');
+  const [filterStatus, setFilterStatus] = useState<'ALL' | TokenStatus>('ACTIVE');
   const [searchQuery, setSearchQuery] = useState('');
 
   const filteredTokens = tokens.filter(t => {
@@ -35,7 +35,7 @@ export const TokenVault: React.FC<TokenVaultProps> = ({
       {/* Header Banner */}
       <div className="bg-white rounded-2xl border border-red-100 p-5 sm:p-6 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <div className="flex items-center gap-2 text-xs font-bold text-red-700 uppercase tracking-wider">
+          <div className="flex items-center gap-2 text-xs font-bold text-[#8b1d24] uppercase tracking-wider">
             <QrCode className="w-4 h-4" />
             <span>Digital Token Passbook</span>
           </div>
@@ -43,21 +43,14 @@ export const TokenVault: React.FC<TokenVaultProps> = ({
             My Digital Meal Tokens
           </h2>
           <p className="text-xs text-slate-600 mt-0.5">
-            Present your token QR code to the dining gate scanner. Note: All meal tokens are final and non-refundable.
+            Present your token QR code to the dining gate scanner.
           </p>
         </div>
 
         <div className="flex items-center gap-2 shrink-0">
           <button
-            onClick={() => window.print()}
-            className="flex items-center gap-1.5 px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-xl text-xs font-semibold transition-colors cursor-pointer"
-          >
-            <Printer className="w-4 h-4" />
-            <span>Print All Tokens</span>
-          </button>
-          <button
             onClick={onNavigateToStore}
-            className="flex items-center gap-1.5 px-4 py-2 bg-red-700 hover:bg-red-800 text-white rounded-xl text-xs font-bold transition-colors cursor-pointer shadow-xs"
+            className="flex items-center gap-1.5 px-4 py-2 bg-[#8b1d24] hover:bg-[#70161c] text-white rounded-xl text-xs font-bold transition-colors cursor-pointer shadow-xs"
           >
             <Utensils className="w-4 h-4" />
             <span>Buy Meal Tokens</span>
@@ -84,8 +77,8 @@ export const TokenVault: React.FC<TokenVaultProps> = ({
               onClick={() => setFilterStatus(status)}
               className={`px-3 py-1.5 rounded-md font-semibold transition-colors cursor-pointer whitespace-nowrap ${
                 filterStatus === status
-                  ? 'bg-red-700 text-white shadow-xs'
-                  : 'text-slate-600 hover:text-red-800'
+                  ? 'bg-[#8b1d24] text-white shadow-xs'
+                  : 'text-slate-600 hover:text-[#8b1d24]'
               }`}
             >
               {status === 'ALL'

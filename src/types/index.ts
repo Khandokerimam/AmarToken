@@ -4,6 +4,8 @@ export type DietaryType = 'REGULAR' | 'VEGETARIAN' | 'HALAL_NON_VEG' | 'DIABETIC
 
 export type TokenStatus = 'ACTIVE' | 'REDEEMED' | 'EXPIRED';
 
+export type UserRole = 'STUDENT' | 'STAFF' | 'ADMIN';
+
 export interface MenuItem {
   id: string;
   name: string;
@@ -18,7 +20,7 @@ export interface MealSchedule {
   mealSlot: MealSlot;
   title: string;
   timeWindow: string;
-  cutoffTime: string; // e.g. "10:30 AM"
+  cutoffTime: string; // e.g. "12:00 AM (Midnight)"
   cutoffHoursRemaining: number;
   price: number;
   isCutoffPassed: boolean;
@@ -29,11 +31,20 @@ export interface ResidentialHall {
   id: string;
   name: string;
   code: string;
+  gender: 'Male' | 'Female';
   banglaName?: string;
   capacity: number;
   currentResidents: number;
   managerName: string;
   phone: string;
+  email?: string;
+  provostName?: string;
+  provostDesignation?: string;
+  diningManagerName?: string;
+  diningManagerPhone?: string;
+  provostNotice?: string;
+  lunchPrice?: number;
+  dinnerPrice?: number;
   colorTheme: string;
   diningSchedule: MealSchedule[];
 }
@@ -43,6 +54,9 @@ export interface StudentProfile {
   studentId: string;
   name: string;
   academicEmail: string;
+  password?: string;
+  role: UserRole;
+  gender?: 'Male' | 'Female' | 'Other';
   hallId: string;
   hallName: string;
   roomNumber: string;
@@ -51,6 +65,18 @@ export interface StudentProfile {
   walletBalance: number;
   dietaryPreference: DietaryType;
   phone: string;
+  idCardPhotoUrl?: string;
+}
+
+export interface KitchenExpenseItem {
+  id: string;
+  name: string;
+  category: 'Grains' | 'Protein' | 'Pulses' | 'Oils' | 'Aromatics' | 'Spices' | 'Produce' | 'Fuel/Misc' | string;
+  perStudentQuantity: number; // in unit (e.g. 0.16 for kg)
+  unit: 'kg' | 'g' | 'Liters' | 'ml' | 'pcs' | 'packet' | string;
+  unitPrice: number; // ৳ per unit
+  totalQuantity?: number;
+  isManualTotal?: boolean;
 }
 
 export interface MealToken {

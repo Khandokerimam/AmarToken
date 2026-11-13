@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { ResidentialHall, MealSchedule, StudentProfile, DietaryType, MealSlot } from '../types';
-import { Utensils, Clock, AlertCircle, Sparkles, ShieldAlert, Check, Building2, Flame, UserCheck, Ban } from 'lucide-react';
+import { Utensils, Clock, AlertCircle, Sparkles, ShieldAlert, Check, Building2, UserCheck, Ban } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { sounds } from '../utils/soundEffects';
 
@@ -34,13 +34,43 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
   const [purchaseSuccessMessage, setPurchaseSuccessMessage] = useState<string | null>(null);
   const [purchaseErrorMessage, setPurchaseErrorMessage] = useState<string | null>(null);
 
+  // Strict Booking Window Enforcement: 6:00 PM – 12:00 AM Midnight (hours 18 to 23)
+  const [demoOverride, setDemoOverride] = useState<boolean>(false);
+  const currentHour = new Date().getHours();
+  const isNaturalWindowOpen = currentHour >= 18 && currentHour < 24;
+  const isBookingWindowOpen = isNaturalWindowOpen || demoOverride;
+
+  const comboPrice = selectedHall.diningSchedule
+    .filter(s => s.mealSlot === 'LUNCH' || s.mealSlot === 'DINNER')
+    .reduce((sum, s) => sum + s.price, 0) || 60;
+
+  // Filter halls based on student gender
+  const displayHalls = halls.filter(h => {
+    if (student.gender === 'Male') return h.gender === 'Male';
+    if (student.gender === 'Female') return h.gender === 'Female';
+    return true;
+  });
+
   const handleOpenPurchase = (schedule: MealSchedule) => {
+    if (!isBookingWindowOpen) {
+      setPurchaseErrorMessage('Daily token booking is only open between 6:00 PM and 12:00 AM (Midnight).');
+      sounds.playErrorBuzz();
+      return;
+    }
     setSelectedSchedule(schedule);
     setPurchaseErrorMessage(null);
   };
 
   const handleConfirmPurchase = () => {
     if (!selectedSchedule) return;
+
+    if (!isBookingWindowOpen) {
+      setPurchaseErrorMessage(
+        'Daily token booking is closed. Tokens can only be booked between 6:00 PM and 12:00 AM (Midnight).'
+      );
+      sounds.playErrorBuzz();
+      return;
+    }
 
     // Check if student belongs to this hall
     if (student.hallId !== selectedHall.id) {
@@ -87,12 +117,16 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
   };
 
   const handleBuyDayPass = () => {
-    // 2 meals only: Lunch (65) + Dinner (60) = 125 -> student subsidized bundle = 115
+    if (!isBookingWindowOpen) {
+      return;
+    }
+
+    // 2 meals: Lunch + Dinner bundle
     const eligibleSchedules = selectedHall.diningSchedule.filter(
       s => s.mealSlot === 'LUNCH' || s.mealSlot === 'DINNER'
     );
 
-    const totalBundlePrice = 115;
+    const totalBundlePrice = eligibleSchedules.reduce((sum, s) => sum + s.price, 0) || 60;
     if (student.walletBalance < totalBundlePrice) {
       onOpenWalletModal();
       return;
@@ -157,13 +191,20 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
           </div>
         </div>
 
-        {/* Hall Selector (7 MBSTU Halls) */}
-        <div className="mt-6 pt-5 border-t border-red-100">
-          <label className="block text-xs font-bold text-slate-700 mb-2.5">
-            Select Residential Hall ({halls.length} MBSTU Halls):
-          </label>
+        {/* Hall Selector (MBSTU Halls filtered by Gender) */}
+        <div className="mt-6 pt-5 border-t border-rose-100">
+          <div className="flex items-center justify-between mb-2.5">
+            <label className="block text-xs font-bold text-slate-700">
+              Select Residential Hall ({displayHalls.length} {student.gender ? `${student.gender} ` : ''}Halls):
+            </label>
+            {student.gender && (
+              <span className="text-[11px] font-semibold text-[#8b1d24] bg-rose-50 px-2 py-0.5 rounded-full border border-rose-200">
+                Filtered for {student.gender} Students
+              </span>
+            )}
+          </div>
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2.5">
-            {halls.map(hall => {
+            {displayHalls.map(hall => {
               const isSelected = selectedHall.id === hall.id;
               const isUserHall = student.hallId === hall.id;
               return (
@@ -172,8 +213,8 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
                   onClick={() => onSelectHall(hall)}
                   className={`text-left p-3 rounded-xl border transition-all cursor-pointer ${
                     isSelected
-                      ? 'border-red-700 bg-red-50 text-red-950 ring-1 ring-red-700 shadow-xs'
-                      : 'border-slate-200 bg-white hover:border-red-300 text-slate-700'
+                      ? 'border-[#8b1d24] bg-rose-50/80 text-rose-950 ring-1 ring-[#8b1d24] shadow-xs'
+                      : 'border-slate-200 bg-white hover:border-rose-300 text-slate-700'
                   }`}
                 >
                   <div className="flex items-center justify-between mb-1">
@@ -181,14 +222,14 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
                       {hall.code}
                     </span>
                     {isUserHall && (
-                      <span className="text-[10px] bg-red-100 text-red-800 px-1.5 py-0.2 rounded font-bold">
+                      <span className="text-[10px] bg-rose-100 text-[#8b1d24] px-1.5 py-0.2 rounded font-bold">
                         Your Hall
                       </span>
                     )}
                   </div>
                   <div className="text-xs font-bold truncate text-slate-900">{hall.name}</div>
                   <div className="text-[10px] text-slate-500 mt-0.5 truncate">
-                    Capacity: {hall.capacity} students
+                    Capacity: {hall.capacity} residents
                   </div>
                 </button>
               );
@@ -200,46 +241,51 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
       {/* Strict No-Refund Policy Notice & 2-Meal Pass */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         {/* Daily Pass (Lunch + Dinner) */}
-        <div className="md:col-span-2 bg-gradient-to-r from-red-800 to-red-950 text-white rounded-2xl p-5 sm:p-6 flex flex-col sm:flex-row items-center justify-between gap-4 shadow-sm border border-red-900">
+        <div className="md:col-span-2 bg-gradient-to-r from-[#8b1d24] to-[#4a0d12] text-white rounded-2xl p-5 sm:p-6 flex flex-col sm:flex-row items-center justify-between gap-4 shadow-sm border border-[#8b1d24]/50">
           <div className="space-y-1.5 text-center sm:text-left">
-            <div className="flex items-center justify-center sm:justify-start gap-1.5 text-red-200 text-xs font-semibold">
+            <div className="flex items-center justify-center sm:justify-start gap-1.5 text-rose-200 text-xs font-semibold">
               <Sparkles className="w-4 h-4 text-amber-300" />
               <span>Full-Day Dining Bundle (2 Meals: Lunch + Dinner)</span>
             </div>
             <h3 className="text-lg font-bold">Get Today's Lunch &amp; Dinner Tokens</h3>
-            <p className="text-xs text-red-100/90 max-w-md">
-              One-click combo pass for both daily dining slots with student subsidy.
+            <p className="text-xs text-rose-100/90 max-w-md">
+              One-click combo pass for both daily dining slots with subsidized rate.
             </p>
           </div>
           <div className="flex flex-col items-center sm:items-end shrink-0">
             <div className="flex items-baseline gap-1.5">
-              <span className="text-xs line-through text-red-300">৳125</span>
-              <span className="text-2xl font-bold font-mono text-amber-300">৳115</span>
+              <span className="text-2xl font-bold font-mono text-amber-300">৳{comboPrice}</span>
+              <span className="text-xs text-rose-200/80">/ day combo</span>
             </div>
             <button
               onClick={handleBuyDayPass}
-              className="mt-2 px-4 py-2 bg-white hover:bg-slate-100 text-red-800 font-bold text-xs rounded-xl transition-colors cursor-pointer shadow-xs"
+              disabled={!isBookingWindowOpen}
+              className={`mt-2 px-4 py-2 font-bold text-xs rounded-xl transition-all shadow-xs ${
+                isBookingWindowOpen
+                  ? 'bg-white hover:bg-slate-100 text-[#8b1d24] cursor-pointer'
+                  : 'bg-white/30 text-rose-200 cursor-not-allowed border border-white/20'
+              }`}
             >
-              Get Both Tokens (৳115)
+              {isBookingWindowOpen ? `Get Both Tokens (৳${comboPrice})` : 'Booking Opens at 6:00 PM'}
             </button>
           </div>
         </div>
 
         {/* Strict No Cancellation / No Refund Policy */}
-        <div className="bg-white border-2 border-red-200 rounded-2xl p-5 flex flex-col justify-between shadow-xs">
+        <div className="bg-white border-2 border-rose-200 rounded-2xl p-5 flex flex-col justify-between shadow-xs">
           <div className="space-y-2">
-            <div className="flex items-center gap-1.5 text-xs font-bold text-red-800 uppercase tracking-wide">
-              <Ban className="w-4 h-4 text-red-600" />
+            <div className="flex items-center gap-1.5 text-xs font-bold text-[#8b1d24] uppercase tracking-wide">
+              <Ban className="w-4 h-4 text-[#8b1d24]" />
               <span>No-Refund &amp; Dining Policy</span>
             </div>
             <p className="text-xs text-slate-700 leading-relaxed font-medium">
-              • <strong>Strict No Refund Policy:</strong> Token purchases are final. No cancellations or refunds will be allowed.<br />
-              • <strong>Lunch Cutoff:</strong> 10:30 AM<br />
-              • <strong>Dinner Cutoff:</strong> 5:00 PM<br />
+              • <strong>Strict No Refund Policy:</strong> Token purchases are final. No cancellations or refunds.<br />
+              • <strong>Booking Window:</strong> 6:00 PM – 12:00 AM (Midnight) for following day<br />
+              • <strong>Fixed Subsidized Price:</strong> ৳30 Lunch · ৳30 Dinner<br />
               • Subsidized exclusively for registered residents.
             </p>
           </div>
-          <div className="mt-3 pt-3 border-t border-red-100 text-[11px] text-slate-500 font-medium">
+          <div className="mt-3 pt-3 border-t border-rose-100 text-[11px] text-slate-500 font-medium">
             Provost: {selectedHall.managerName}
           </div>
         </div>
@@ -247,14 +293,35 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
 
       {/* Two Meals Store: Lunch & Dinner */}
       <section className="space-y-4">
-        <div className="flex items-center justify-between">
-          <h2 className="text-lg font-bold text-slate-900 flex items-center gap-2">
-            <Utensils className="w-5 h-5 text-red-700" />
-            <span>Today's Meal Tokens (Lunch &amp; Dinner)</span>
-          </h2>
-          <span className="text-xs text-slate-500 font-mono">
-            {new Date().toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })}
-          </span>
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="flex items-center gap-2.5">
+            <h2 className="text-lg font-bold text-slate-900 flex items-center gap-2">
+              <Utensils className="w-5 h-5 text-[#8b1d24]" />
+              <span>Today's Meal Tokens (Lunch &amp; Dinner)</span>
+            </h2>
+            <span
+              className={`px-2 py-0.5 text-[10px] font-bold rounded-full ${
+                isBookingWindowOpen ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'
+              }`}
+            >
+              {isBookingWindowOpen ? 'Window Active (6PM–12AM)' : 'Window Closed (Opens 6PM)'}
+            </span>
+          </div>
+
+          <div className="flex items-center gap-3">
+            {/* Subtle Demo Override Toggle */}
+            <button
+              type="button"
+              onClick={() => setDemoOverride(!demoOverride)}
+              className="text-[11px] font-mono text-slate-400 hover:text-slate-600 underline cursor-pointer"
+              title="Toggle to simulate 6PM–12AM booking window for daytime testing"
+            >
+              Demo Override: {demoOverride ? 'Simulated Active (ON)' : 'Live Window (OFF)'}
+            </button>
+            <span className="text-xs text-slate-500 font-mono hidden sm:inline">
+              {new Date().toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })}
+            </span>
+          </div>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
@@ -263,13 +330,13 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
             return (
               <div
                 key={schedule.id}
-                className="bg-white rounded-2xl border border-red-100 hover:border-red-300 p-5 shadow-xs transition-all flex flex-col justify-between"
+                className="bg-white rounded-2xl border border-rose-100 hover:border-rose-300 p-5 shadow-xs transition-all flex flex-col justify-between"
               >
                 <div>
                   {/* Top Bar: Meal Slot and Price */}
                   <div className="flex items-start justify-between gap-2 mb-2">
                     <div>
-                      <span className="text-xs font-bold tracking-wider text-red-700 uppercase">
+                      <span className="text-xs font-bold tracking-wider text-[#8b1d24] uppercase">
                         {schedule.mealSlot} MEAL
                       </span>
                       <h3 className="text-lg font-extrabold text-slate-900 mt-0.5">
@@ -277,40 +344,32 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
                       </h3>
                     </div>
                     <div className="text-right">
-                      <div className="text-2xl font-bold font-mono text-red-800">
+                      <div className="text-2xl font-bold font-mono text-[#8b1d24]">
                         ৳{schedule.price}
                       </div>
                       <div className="text-[10px] text-slate-500">per token</div>
                     </div>
                   </div>
 
-                  {/* Timings and Cutoff */}
+                  {/* Timings and Cutoff (Calorie removed) */}
                   <div className="flex flex-wrap items-center gap-3 text-xs text-slate-600 mb-4">
                     <span className="flex items-center gap-1 font-medium">
                       <Clock className="w-3.5 h-3.5 text-slate-400" />
-                      {schedule.timeWindow}
+                      Serving: {schedule.timeWindow}
                     </span>
                     <span>·</span>
-                    <span className="flex items-center gap-1 text-red-700 font-bold">
-                      Order Cutoff: {schedule.cutoffTime}
-                    </span>
-                    <span>·</span>
-                    <span className="flex items-center gap-1 text-slate-500">
-                      <Flame className="w-3.5 h-3.5 text-orange-500" />
-                      {schedule.menu.calories} kcal
+                    <span className="flex items-center gap-1 text-[#8b1d24] font-bold">
+                      Cutoff: 12:00 AM (Midnight)
                     </span>
                   </div>
 
-                  {/* Clean Token Highlight without heavy menus */}
-                  <div className="bg-red-50/50 rounded-xl p-3.5 border border-red-100 mb-4 text-xs text-slate-700 leading-relaxed">
-                    <div className="font-semibold text-slate-900 mb-1">
+                  {/* Clean Token Highlight (Menu description removed) */}
+                  <div className="bg-rose-50/50 rounded-xl p-3.5 border border-rose-100 mb-4 text-xs text-slate-700">
+                    <div className="font-semibold text-slate-900">
                       {isLunch ? 'Daily Afternoon Lunch' : 'Daily Evening Dinner'}
                     </div>
-                    <p className="text-slate-600">
-                      {schedule.menu.description}
-                    </p>
-                    <div className="mt-2 text-[11px] text-red-800 font-semibold flex items-center gap-1">
-                      <Ban className="w-3 h-3 text-red-600" />
+                    <div className="mt-1 text-[11px] text-[#8b1d24] font-semibold flex items-center gap-1">
+                      <Ban className="w-3 h-3 text-[#8b1d24]" />
                       <span>Tokens are non-refundable once issued</span>
                     </div>
                   </div>
@@ -323,9 +382,18 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
                   </div>
                   <button
                     onClick={() => handleOpenPurchase(schedule)}
-                    className="px-5 py-2.5 bg-red-700 hover:bg-red-800 text-white rounded-xl text-xs font-bold transition-colors cursor-pointer flex items-center gap-1.5 shadow-xs"
+                    disabled={!isBookingWindowOpen}
+                    className={`px-5 py-2.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 shadow-xs ${
+                      isBookingWindowOpen
+                        ? 'bg-[#8b1d24] hover:bg-[#70161c] text-white cursor-pointer'
+                        : 'bg-slate-100 text-slate-400 border border-slate-200 cursor-not-allowed'
+                    }`}
                   >
-                    <span>Buy {schedule.mealSlot} Token (৳{schedule.price})</span>
+                    <span>
+                      {isBookingWindowOpen
+                        ? `Buy ${schedule.mealSlot} Token (৳${schedule.price})`
+                        : 'Booking Opens at 6:00 PM'}
+                    </span>
                   </button>
                 </div>
               </div>
@@ -483,7 +551,7 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
               <button
                 type="button"
                 onClick={handleConfirmPurchase}
-                className="flex-1 py-2.5 bg-red-700 hover:bg-red-800 text-white rounded-xl text-xs font-bold transition-colors cursor-pointer shadow-sm"
+                className="flex-1 py-2.5 bg-[#8b1d24] hover:bg-[#70161c] text-white rounded-xl text-xs font-bold transition-colors cursor-pointer shadow-sm"
               >
                 Pay ৳{selectedSchedule.price} &amp; Issue Token
               </button>
