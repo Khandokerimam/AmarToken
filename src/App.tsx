@@ -20,51 +20,25 @@ import {
   DietaryType
 } from './types';
 import { Header } from './components/Header';
-import { HomePage } from './components/HomePage';
 import { StudentPortal } from './components/StudentPortal';
 import { TokenVault } from './components/TokenVault';
 import { StaffScanner } from './components/StaffScanner';
 import { ManagerKitchenPanel } from './components/ManagerKitchenPanel';
 import { WalletModal } from './components/WalletModal';
 import { RegisterModal } from './components/RegisterModal';
-import { ProfileModal } from './components/ProfileModal';
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState<'home' | 'store' | 'tokens' | 'scanner' | 'kitchen'>('home');
+  const [activeTab, setActiveTab] = useState<'store' | 'tokens' | 'scanner' | 'kitchen'>('store');
   const [halls, setHalls] = useState<ResidentialHall[]>(UNIVERSITY_HALLS);
   const [selectedHall, setSelectedHall] = useState<ResidentialHall>(UNIVERSITY_HALLS[5]); // Shaheed Abrar Fahad Hall
   const [student, setStudent] = useState<StudentProfile>(INITIAL_STUDENT);
-  const [isLoggedIn, setIsLoggedIn] = useState<boolean>(true);
   const [tokens, setTokens] = useState<MealToken[]>(INITIAL_TOKENS);
   const [transactions, setTransactions] = useState<WalletTransaction[]>(INITIAL_TRANSACTIONS);
   const [isWalletModalOpen, setIsWalletModalOpen] = useState(false);
   const [isRegisterModalOpen, setIsRegisterModalOpen] = useState(false);
-  const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
 
   // Active token count for badge
   const activeTokenCount = tokens.filter(t => t.status === 'ACTIVE').length;
-
-  // Logout Handler (switches to Homepage)
-  const handleLogout = () => {
-    setIsLoggedIn(false);
-    setIsProfileModalOpen(false);
-    setActiveTab('home');
-  };
-
-  // Student Profile Update Handler
-  const handleUpdateProfile = (updatedProfile: StudentProfile) => {
-    setStudent(updatedProfile);
-    const registeredHall = halls.find(h => h.id === updatedProfile.hallId);
-    if (registeredHall) {
-      setSelectedHall(registeredHall);
-    }
-  };
-
-  // Hall Selection and Navigation from Homepage
-  const handleSelectHallAndNavigate = (hall: ResidentialHall) => {
-    setSelectedHall(hall);
-    setActiveTab('store');
-  };
 
   // Purchase Token Handler
   const handlePurchaseToken = (
@@ -230,59 +204,26 @@ export default function App() {
   // Student Registration Handler
   const handleRegisterStudent = (newProfile: StudentProfile) => {
     setStudent(newProfile);
-    setIsLoggedIn(true);
     const registeredHall = halls.find(h => h.id === newProfile.hallId);
     if (registeredHall) {
       setSelectedHall(registeredHall);
     }
-    setActiveTab('store');
   };
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900 flex flex-col font-sans selection:bg-red-100 selection:text-red-900">
-      {/* Top Bar Header with MBSTU Logo, Red Theme & Profile Section */}
+      {/* Top Bar Header with MBSTU Logo & Red Theme */}
       <Header
         activeTab={activeTab}
         onSelectTab={setActiveTab}
         student={student}
         activeTokenCount={activeTokenCount}
-        isLoggedIn={isLoggedIn}
-        onOpenWalletModal={() => {
-          if (!isLoggedIn) {
-            setIsRegisterModalOpen(true);
-          } else {
-            setIsWalletModalOpen(true);
-          }
-        }}
+        onOpenWalletModal={() => setIsWalletModalOpen(true)}
         onOpenRegisterModal={() => setIsRegisterModalOpen(true)}
-        onOpenProfileModal={() => setIsProfileModalOpen(true)}
-        onLogout={handleLogout}
       />
 
       {/* Main Content Viewport */}
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {activeTab === 'home' && (
-          <HomePage
-            halls={halls}
-            onSelectHallAndNavigate={handleSelectHallAndNavigate}
-            onNavigateToStore={() => {
-              if (!isLoggedIn) {
-                setIsLoggedIn(true);
-              }
-              setActiveTab('store');
-            }}
-            onNavigateToTokens={() => {
-              if (!isLoggedIn) {
-                setIsLoggedIn(true);
-              }
-              setActiveTab('tokens');
-            }}
-            onOpenRegisterModal={() => setIsRegisterModalOpen(true)}
-            isLoggedIn={isLoggedIn}
-            student={student}
-          />
-        )}
-
         {activeTab === 'store' && (
           <StudentPortal
             halls={halls}
@@ -323,17 +264,6 @@ export default function App() {
           />
         )}
       </main>
-
-      {/* Student Profile & Edit Modal */}
-      <ProfileModal
-        isOpen={isProfileModalOpen}
-        onClose={() => setIsProfileModalOpen(false)}
-        student={student}
-        halls={halls}
-        onUpdateProfile={handleUpdateProfile}
-        onLogout={handleLogout}
-        onOpenWalletModal={() => setIsWalletModalOpen(true)}
-      />
 
       {/* Student Academic Registration Modal */}
       <RegisterModal
