@@ -12,7 +12,6 @@ import {
   Home,
   GraduationCap,
   Phone,
-  UtensilsCrossed,
   Wallet,
   LogOut,
   Edit3,
@@ -50,6 +49,7 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
 
   // Form state
   const [name, setName] = useState(student.name);
+  const [gender, setGender] = useState<'Male' | 'Female' | 'Other'>(student.gender || 'Male');
   const [roomNumber, setRoomNumber] = useState(student.roomNumber);
   const [department, setDepartment] = useState(student.department);
   const [batch, setBatch] = useState(student.batch);
@@ -58,11 +58,31 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
   const [dietaryPreference, setDietaryPreference] = useState<DietaryType>(student.dietaryPreference);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
+  // Filter halls based on selected gender in edit form
+  const availableHalls = halls.filter(h => {
+    if (gender === 'Male') return h.gender === 'Male';
+    if (gender === 'Female') return h.gender === 'Female';
+    return true;
+  });
+
+  const handleGenderChange = (newGender: 'Male' | 'Female' | 'Other') => {
+    setGender(newGender);
+    const matching = halls.filter(h => {
+      if (newGender === 'Male') return h.gender === 'Male';
+      if (newGender === 'Female') return h.gender === 'Female';
+      return true;
+    });
+    if (matching.length > 0 && !matching.some(h => h.id === hallId)) {
+      setHallId(matching[0].id);
+    }
+  };
+
   if (!isOpen) return null;
 
   // Reset form to current student state whenever modal opens or cancel is clicked
   const handleCancelEdit = () => {
     setName(student.name);
+    setGender(student.gender || 'Male');
     setRoomNumber(student.roomNumber);
     setDepartment(student.department);
     setBatch(student.batch);
@@ -79,10 +99,6 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
       setErrorMsg('Full name cannot be empty.');
       return;
     }
-    if (!roomNumber.trim()) {
-      setErrorMsg('Room number is required.');
-      return;
-    }
     if (!department.trim()) {
       setErrorMsg('Department is required.');
       return;
@@ -96,7 +112,8 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
     const updated: StudentProfile = {
       ...student,
       name: name.trim(),
-      roomNumber: roomNumber.trim(),
+      gender,
+      roomNumber: roomNumber.trim() || 'Non-Resident',
       department: department.trim(),
       batch: batch.trim(),
       phone: phone.trim(),
@@ -131,17 +148,33 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
         <div className="bg-gradient-to-r from-red-800 via-red-700 to-red-800 px-6 py-5 text-white flex items-center justify-between relative shrink-0">
           <div className="flex items-center gap-3.5">
             <div className="w-12 h-12 rounded-xl bg-white p-1 border border-red-300 shadow-md flex items-center justify-center overflow-hidden shrink-0">
-              <img
-                src="/assets/aistudio/university_projects_550e2ddf.png"
-                alt="MBSTU Emblem"
-                className="w-full h-full object-contain"
-              />
+              {student.idCardPhotoUrl ? (
+                <img
+                  src={student.idCardPhotoUrl}
+                  alt={student.name}
+                  className="w-full h-full object-cover rounded-lg"
+                />
+              ) : (
+                <img
+                  src="/assets/aistudio/university_projects_550e2ddf.png"
+                  alt="MBSTU Emblem"
+                  className="w-full h-full object-contain"
+                />
+              )}
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <h3 className="text-lg font-bold text-white tracking-tight">Student Profile</h3>
-                <span className="px-2 py-0.5 bg-red-900/60 border border-red-300/30 rounded text-[10px] font-mono tracking-wider uppercase text-red-100">
-                  MBSTU Boarder ID
+                <h3 className="text-lg font-bold text-white tracking-tight">
+                  {student.role === 'ADMIN' ? 'Hall Admin Profile' : student.role === 'STAFF' ? 'Hall Staff Profile' : 'Student Profile'}
+                </h3>
+                <span className={`px-2 py-0.5 rounded text-[10px] font-mono tracking-wider uppercase font-bold ${
+                  student.role === 'ADMIN'
+                    ? 'bg-amber-400 text-amber-950'
+                    : student.role === 'STAFF'
+                    ? 'bg-blue-400 text-blue-950'
+                    : 'bg-red-900/60 border border-red-300/30 text-red-100'
+                }`}>
+                  {student.role || 'STUDENT'}
                 </span>
               </div>
               <p className="text-xs text-red-100/90 font-medium">
@@ -177,8 +210,16 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
           {/* Identification Banner */}
           <div className="bg-gradient-to-br from-red-50/70 via-white to-slate-50 border border-red-100 rounded-xl p-4.5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
             <div className="flex items-center gap-3.5">
-              <div className="w-14 h-14 rounded-full bg-red-700 text-white font-black text-xl flex items-center justify-center shadow-sm shrink-0 border-2 border-white ring-2 ring-red-200">
-                {student.name.split(' ').map(n => n[0]).slice(0, 2).join('').toUpperCase()}
+              <div className="w-14 h-14 rounded-full bg-red-700 text-white font-black text-xl flex items-center justify-center shadow-sm shrink-0 border-2 border-white ring-2 ring-red-200 overflow-hidden">
+                {student.idCardPhotoUrl ? (
+                  <img
+                    src={student.idCardPhotoUrl}
+                    alt={student.name}
+                    className="w-full h-full object-cover"
+                  />
+                ) : (
+                  student.name.split(' ').map(n => n[0]).slice(0, 2).join('').toUpperCase()
+                )}
               </div>
               <div>
                 <h4 className="text-base font-bold text-slate-900 flex items-center gap-1.5">
@@ -258,7 +299,7 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
                       type="text"
                       value={name}
                       onChange={e => setName(e.target.value)}
-                      className="w-full pl-9 pr-3 py-2 text-xs bg-white border border-slate-300 rounded-lg focus:outline-none focus:border-red-600 focus:ring-1 focus:ring-red-600"
+                      className="w-full pl-9 pr-3 py-2 text-xs bg-white border border-slate-300 rounded-lg focus:outline-none focus:border-[#8b1d24] focus:ring-1 focus:ring-[#8b1d24]"
                       placeholder="e.g. Tanvir Ahmed"
                       required
                     />
@@ -275,9 +316,9 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
                       <select
                         value={hallId}
                         onChange={e => setHallId(e.target.value)}
-                        className="w-full pl-9 pr-3 py-2 text-xs bg-white border border-slate-300 rounded-lg focus:outline-none focus:border-red-600 focus:ring-1 focus:ring-red-600 text-slate-800"
+                        className="w-full pl-9 pr-3 py-2 text-xs bg-white border border-slate-300 rounded-lg focus:outline-none focus:border-[#8b1d24] focus:ring-1 focus:ring-[#8b1d24] text-slate-800"
                       >
-                        {halls.map(h => (
+                        {availableHalls.map(h => (
                           <option key={h.id} value={h.id}>
                             {h.name} ({h.code})
                           </option>
@@ -288,7 +329,7 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
 
                   <div>
                     <label className="block text-xs font-semibold text-slate-700 mb-1">
-                      Allocated Room / Block <span className="text-red-600">*</span>
+                      Allocated Room / Block (Optional)
                     </label>
                     <div className="relative">
                       <Home className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
@@ -296,15 +337,29 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
                         type="text"
                         value={roomNumber}
                         onChange={e => setRoomNumber(e.target.value)}
-                        className="w-full pl-9 pr-3 py-2 text-xs bg-white border border-slate-300 rounded-lg focus:outline-none focus:border-red-600 focus:ring-1 focus:ring-red-600"
-                        placeholder="e.g. Room 314 (Block B)"
-                        required
+                        className="w-full pl-9 pr-3 py-2 text-xs bg-white border border-slate-300 rounded-lg focus:outline-none focus:border-[#8b1d24] focus:ring-1 focus:ring-[#8b1d24]"
+                        placeholder="e.g. Room 314 (Block B) or Non-Resident"
                       />
                     </div>
                   </div>
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 mb-1">
+                      Gender
+                    </label>
+                    <select
+                      value={gender}
+                      onChange={e => handleGenderChange(e.target.value as 'Male' | 'Female' | 'Other')}
+                      className="w-full px-3 py-2 text-xs bg-white border border-slate-300 rounded-lg focus:outline-none focus:border-[#8b1d24] focus:ring-1 focus:ring-[#8b1d24] text-slate-800 cursor-pointer"
+                    >
+                      <option value="Male">Male</option>
+                      <option value="Female">Female</option>
+                      <option value="Other">Other</option>
+                    </select>
+                  </div>
+
                   <div>
                     <label className="block text-xs font-semibold text-slate-700 mb-1">
                       Department <span className="text-red-600">*</span>
@@ -315,7 +370,7 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
                         type="text"
                         value={department}
                         onChange={e => setDepartment(e.target.value)}
-                        className="w-full pl-9 pr-3 py-2 text-xs bg-white border border-slate-300 rounded-lg focus:outline-none focus:border-red-600 focus:ring-1 focus:ring-red-600"
+                        className="w-full pl-9 pr-3 py-2 text-xs bg-white border border-slate-300 rounded-lg focus:outline-none focus:border-[#8b1d24] focus:ring-1 focus:ring-[#8b1d24]"
                         placeholder="e.g. ICT, CSE, EEE, Textile"
                         required
                       />
@@ -330,47 +385,26 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
                       type="text"
                       value={batch}
                       onChange={e => setBatch(e.target.value)}
-                      className="w-full px-3 py-2 text-xs bg-white border border-slate-300 rounded-lg focus:outline-none focus:border-red-600 focus:ring-1 focus:ring-red-600"
+                      className="w-full px-3 py-2 text-xs bg-white border border-slate-300 rounded-lg focus:outline-none focus:border-[#8b1d24] focus:ring-1 focus:ring-[#8b1d24]"
                       placeholder="e.g. 2021-22"
                     />
                   </div>
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-700 mb-1">
-                      Phone Number <span className="text-red-600">*</span>
-                    </label>
-                    <div className="relative">
-                      <Phone className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
-                      <input
-                        type="tel"
-                        value={phone}
-                        onChange={e => setPhone(e.target.value)}
-                        className="w-full pl-9 pr-3 py-2 text-xs bg-white border border-slate-300 rounded-lg focus:outline-none focus:border-red-600 focus:ring-1 focus:ring-red-600"
-                        placeholder="+880-1700-000000"
-                        required
-                      />
-                    </div>
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-700 mb-1">
-                      Dietary Preference
-                    </label>
-                    <div className="relative">
-                      <UtensilsCrossed className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
-                      <select
-                        value={dietaryPreference}
-                        onChange={e => setDietaryPreference(e.target.value as DietaryType)}
-                        className="w-full pl-9 pr-3 py-2 text-xs bg-white border border-slate-300 rounded-lg focus:outline-none focus:border-red-600 focus:ring-1 focus:ring-red-600 text-slate-800"
-                      >
-                        <option value="HALAL_NON_VEG">Halal Non-Veg (Standard)</option>
-                        <option value="REGULAR">Regular Meal</option>
-                        <option value="VEGETARIAN">Vegetarian Special</option>
-                        <option value="DIABETIC_SPECIAL">Diabetic / Low Spice</option>
-                      </select>
-                    </div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">
+                    Phone Number <span className="text-red-600">*</span>
+                  </label>
+                  <div className="relative">
+                    <Phone className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
+                    <input
+                      type="tel"
+                      value={phone}
+                      onChange={e => setPhone(e.target.value)}
+                      className="w-full pl-9 pr-3 py-2 text-xs bg-white border border-slate-300 rounded-lg focus:outline-none focus:border-[#8b1d24] focus:ring-1 focus:ring-[#8b1d24]"
+                      placeholder="+880-1700-000000"
+                      required
+                    />
                   </div>
                 </div>
               </div>
@@ -386,7 +420,7 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
                 </button>
                 <button
                   type="submit"
-                  className="flex items-center gap-1.5 px-4 py-2 bg-red-700 hover:bg-red-800 text-white rounded-lg text-xs font-semibold transition-colors cursor-pointer shadow-xs"
+                  className="flex items-center gap-1.5 px-4 py-2 bg-[#8b1d24] hover:bg-[#70161c] text-white rounded-lg text-xs font-semibold transition-colors cursor-pointer shadow-xs"
                 >
                   <Save className="w-3.5 h-3.5" />
                   Save Changes
@@ -425,20 +459,33 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
 
                 <div className="p-3 bg-slate-50 rounded-xl border border-slate-100">
                   <div className="text-[11px] text-slate-500 font-medium flex items-center gap-1.5">
-                    <Home className="w-3.5 h-3.5 text-red-700" />
+                    <Home className="w-3.5 h-3.5 text-[#8b1d24]" />
                     Allocated Room
                   </div>
                   <div className="text-xs font-bold text-slate-900 mt-1">
                     {student.roomNumber}
                   </div>
                   <div className="text-[11px] text-slate-500 mt-0.5">
-                    Boarder Seat Registered
+                    {student.roomNumber === 'Non-Resident' ? 'Non-Resident Boarder' : 'Boarder Seat Registered'}
                   </div>
                 </div>
 
                 <div className="p-3 bg-slate-50 rounded-xl border border-slate-100">
                   <div className="text-[11px] text-slate-500 font-medium flex items-center gap-1.5">
-                    <GraduationCap className="w-3.5 h-3.5 text-red-700" />
+                    <User className="w-3.5 h-3.5 text-[#8b1d24]" />
+                    Gender
+                  </div>
+                  <div className="text-xs font-bold text-slate-900 mt-1">
+                    {student.gender || 'Not Specified'}
+                  </div>
+                  <div className="text-[11px] text-slate-500 mt-0.5">
+                    Student Demographic Record
+                  </div>
+                </div>
+
+                <div className="p-3 bg-slate-50 rounded-xl border border-slate-100">
+                  <div className="text-[11px] text-slate-500 font-medium flex items-center gap-1.5">
+                    <GraduationCap className="w-3.5 h-3.5 text-[#8b1d24]" />
                     Department &amp; Batch
                   </div>
                   <div className="text-xs font-bold text-slate-900 mt-1">
@@ -464,7 +511,7 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
 
                 <div className="p-3 bg-slate-50 rounded-xl border border-slate-100">
                   <div className="text-[11px] text-slate-500 font-medium flex items-center gap-1.5">
-                    <Phone className="w-3.5 h-3.5 text-red-700" />
+                    <Phone className="w-3.5 h-3.5 text-[#8b1d24]" />
                     Contact Phone
                   </div>
                   <div className="text-xs font-semibold text-slate-900 mt-1">
@@ -474,24 +521,6 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
                     Registered Mobile Hotline
                   </div>
                 </div>
-
-                <div className="p-3 bg-slate-50 rounded-xl border border-slate-100">
-                  <div className="text-[11px] text-slate-500 font-medium flex items-center gap-1.5">
-                    <UtensilsCrossed className="w-3.5 h-3.5 text-red-700" />
-                    Dietary Preference
-                  </div>
-                  <div className="text-xs font-semibold text-slate-900 mt-1">
-                    {student.dietaryPreference.replace(/_/g, ' ')}
-                  </div>
-                  <div className="text-[11px] text-slate-500 mt-0.5">
-                    Assigned Dining Kitchen
-                  </div>
-                </div>
-              </div>
-
-              {/* Policy note */}
-              <div className="p-3 bg-red-50/60 border border-red-100 rounded-xl text-slate-600 text-[11px] leading-relaxed">
-                <span className="font-bold text-red-800">Dining Rules Reminder:</span> Tokens purchased for Lunch (closing 10:30 AM) and Dinner (closing 5:00 PM) are strictly non-refundable and tied to your residential boarder credentials.
               </div>
             </div>
           )}
